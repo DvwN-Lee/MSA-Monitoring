@@ -1,21 +1,41 @@
 # Cloud-Native 마이크로서비스 플랫폼 시스템 설계서
 
-**문서 버전**: 1.0  
-**작성일**: 2025년 9월 30일
+**문서 버전**: 2.0  
+**작성일**: 2025년 10월 13일
+
+---
+
+## 문서 변경 이력
+
+| 문서 버전 | 날짜 | 주요 변경 내용 | 영향 받는 섹션 |
+|----------|------|---------------|---------------|
+| **1.0** | 2025-09-30 | 초안 작성 (AWS 기반 설계) | 전체 아키텍처를 AWS EKS 환경 기준으로 작성 |
+| **2.0** | 2025-10-13 | **AWS VPC → Solid Cloud 네트워크 구성**으로 변경, **AWS EKS → Solid Cloud Kubernetes**로 변경, | 전체 시스템 아키텍처, Solid Cloud 구성|
 
 ---
 
 ## 1. 시스템 개요
 
 ### 1.1. 아키텍처 원칙
-- **Infrastructure as Code (IaC)**: 모든 인프라는 Terraform 코드로 정의하고 관리하여 재현성과 일관성을 보장한다.
-- **GitOps**: Git 저장소를 단일 진실 공급원(Single Source of Truth)으로 삼아 모든 배포를 자동화하고 추적한다.
-- **Observability**: 시스템의 상태를 외부에서 완벽히 이해할 수 있도록 Metrics, Logs, Traces 수집을 기본으로 한다.
-- **Security by Default**: 모든 통신은 암호화를 기본으로 하며, 최소 권한 원칙을 따른다.
 
-### 1.2. 기술 스택 개요
-- **Cloud**: AWS
-- **Container Orchestration**: Amazon EKS (Kubernetes)
+본 프로젝트는 다음의 핵심 원칙을 따라 설계되었습니다:
+
+- **Infrastructure as Code (IaC)**  
+  모든 인프라를 Terraform 코드로 정의하여 재현 가능하고 일관된 환경을 구축합니다.
+
+- **GitOps**  
+  Git 저장소를 유일한 신뢰 소스(Single Source of Truth)로 삼아 모든 배포를 자동화합니다.
+
+- **Observability (관측성)**  
+  메트릭, 로그, 트레이스를 수집하여 시스템 상태를 명확히 파악할 수 있도록 합니다.
+
+- **Security by Default**  
+  모든 통신은 암호화를 기본으로 하며, 최소 권한 원칙을 따릅니다.
+
+### 1.2. 기술 스택
+
+- **Cloud Platform**: Solid Cloud (단국대학교)
+- **Container Orchestration**: Kubernetes
 - **IaC**: Terraform
 - **CI/CD**: GitHub Actions, Argo CD
 - **Service Mesh**: Istio
@@ -24,73 +44,262 @@
 - **Application**: Go, Python (FastAPI)
 - **Database**: PostgreSQL, Redis
 
-> **참고**: 각 기술 스택의 상세한 선택 이유는 `../adr/` 디렉토리의 기술 결정 기록(ADR) 문서를 참조하십시오.
+> **참고**: 각 기술을 선택한 이유는 `docs/adr/` 디렉토리의 기술 결정 기록(ADR)을 참고하세요.
 
-### 1.3. 문서 구조 안내
+### 1.3. 문서 구조
 
-본 설계서는 시스템 아키텍처의 **핵심 개념과 구조**를 설명합니다. 
+본 설계서는 시스템 아키텍처의 **핵심 개념과 구조**를 설명합니다.
 
-**상세 구현 정보 위치:**
-- **Terraform 변수 및 모듈 설정**: `terraform/` 디렉토리의 코드 및 주석
-- **Kubernetes 리소스 상세**: `k8s/` 디렉토리의 매니페스트 및 Kustomize 설정
-- **CI/CD 파이프라인 스크립트**: `.github/workflows/` 디렉토리
-- **애플리케이션 로직**: 각 서비스의 소스 코드 및 README
-
-> **개인 프로젝트 고려**: 1인 프로젝트이므로 모든 구현 세부사항을 문서화하는 대신, 핵심 설계 결정과 아키텍처 패턴에 집중했습니다.
+**상세 구현 정보는 다음 위치를 참고하세요:**
+- **Terraform 코드**: `terraform/` 디렉토리
+- **Kubernetes 매니페스트**: `k8s/` 디렉토리
+- **CI/CD 스크립트**: `.github/workflows/` 디렉토리
+- **서비스 소스 코드**: 각 서비스 디렉토리의 README
 
 ---
 
-## 2. 시스템 아키텍처
+## 2. 전체 시스템 아키텍처
 
-### 2.1. 전체 아키텍처 다이어그램
+### 2.1. 아키텍처 다이어그램
 
-### 2.2. 네트워크 아키텍처 (VPC)
-- **VPC CIDR**: `10.0.0.0/16`
-- **Public Subnets**: 2개의 가용 영역(AZ)에 걸쳐 Public Subnet 2개 구성. (ALB, NAT Gateway 용도)
-- **Private Subnets**: 2개의 가용 영역(AZ)에 걸쳐 Private Subnet 2개 구성. (EKS Worker Nodes 용도)
-- **NAT Gateway**: Private Subnet의 아웃바운드 인터넷 통신을 위해 1개의 NAT Gateway를 Public Subnet에 배치. (비용 절감)
-- **Security Groups**: 각 리소스 그룹(ALB, EKS Nodes, DB)에 필요한 최소한의 포트만 허용하도록 규칙 설정.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        GitHub Repository                     │
+│  ┌─────────────────┐              ┌────────────────────┐   │
+│  │  Application    │              │  GitOps Config     │   │
+│  │  Source Code    │              │  (k8s manifests)   │   │
+│  └────────┬────────┘              └─────────┬──────────┘   │
+└───────────┼──────────────────────────────────┼──────────────┘
+            │                                   │
+            │ Git Push                          │ Git Push
+            ▼                                   ▼
+   ┌────────────────────┐            ┌──────────────────┐
+   │  GitHub Actions    │            │    Argo CD       │
+   │  (CI Pipeline)     │            │  (CD Pipeline)   │
+   └────────┬───────────┘            └────────┬─────────┘
+            │                                  │
+            │ Push Image                       │ Pull & Deploy
+            ▼                                  ▼
+   ┌──────────────────┐            ┌─────────────────────────┐
+   │ Container        │            │    Solid Cloud          │
+   │ Registry         │            │  Kubernetes Cluster     │
+   └──────────────────┘            │                         │
+                                   │  ┌───────────────────┐ │
+                                   │  │  API Gateway (Go) │ │
+                                   │  └─────────┬─────────┘ │
+                                   │            │           │
+                                   │  ┌─────────▼─────────┐ │
+                                   │  │  Microservices    │ │
+                                   │  │  (Python/FastAPI) │ │
+                                   │  └─────────┬─────────┘ │
+                                   │            │           │
+                                   │  ┌─────────▼─────────┐ │
+                                   │  │   PostgreSQL      │ │
+                                   │  │     Redis         │ │
+                                   │  └───────────────────┘ │
+                                   └─────────────────────────┘
+```
+
+### 2.2. 네트워크 구조
+
+#### Kubernetes 클러스터 구성
+- **네임스페이스 구조**
+  - `default`: 애플리케이션 서비스
+  - `monitoring`: Prometheus, Grafana, Loki
+  - `istio-system`: Istio 컴포넌트
+  - `argocd`: Argo CD
+
+#### 서비스 통신
+- **외부 → 클러스터**: Load Balancer → Istio Ingress Gateway
+- **서비스 간**: Istio Service Mesh (mTLS 암호화)
+- **DB 접근**: 각 서비스 → PostgreSQL Service
 
 ---
 
-## 3. CI/CD 파이프라인 설계
+## 3. 마이크로서비스 구조
 
-### 3.1. GitHub Actions 워크플로우 (CI)
-- **Trigger**: `main` 브랜치로의 `push` 또는 `pull_request`
-- **Jobs**:
-  1.  **Lint & Test**: `golangci-lint`, `flake8` 실행 및 `go test`, `pytest`로 단위 테스트와 커버리지 측정.
-  2.  **Build**: Docker 멀티 스테이지 빌드를 통해 경량화된 컨테이너 이미지 생성.
-  3.  **Scan**: Trivy를 사용하여 이미지의 보안 취약점 스캔.
-  4.  **Push**: 빌드된 이미지를 AWS ECR에 푸시.
-  5.  **Update Manifests**: GitOps 저장소의 Kustomize 이미지 태그를 새로운 Git SHA로 자동 업데이트 후 커밋.
+### 3.1. 서비스 목록
 
-### 3.2. Argo CD 구성 (CD)
-- **Application 설정**: App of Apps 패턴을 사용하여 여러 마이크로서비스를 단일 Application으로 관리.
-- **Sync Policy**:
-  - `automated`: GitOps 저장소 변경 시 자동 동기화.
-  - `prune: true`: Git에서 삭제된 리소스를 클러스터에서도 자동 제거.
-  - `selfHeal: true`: 클러스터 상태가 Git과 달라지면 자동으로 Git 상태로 복구.
+| 서비스명 | 언어 | 역할 | 주요 기능 |
+|---------|------|------|----------|
+| **API Gateway** | Go | 라우팅 및 부하 분산 | 요청 라우팅, Rate Limiting |
+| **Auth Service** | Python | 인증/인가 | JWT 토큰 발급/검증 |
+| **User Service** | Python | 사용자 관리 | 회원가입, 프로필 관리 |
+| **Blog Service** | Python | 블로그 관리 | 게시글 CRUD, 검색 |
+
+### 3.2. 데이터 저장소
+
+- **PostgreSQL**: 사용자 정보, 블로그 게시글 등 영속 데이터
+- **Redis**: 세션 정보, 캐시 데이터
+
+### 3.3. 서비스 간 통신 흐름
+
+```
+User Request
+    ↓
+Load Balancer
+    ↓
+Istio Ingress Gateway
+    ↓
+API Gateway (Go)
+    ↓
+┌───────────┬───────────┬───────────┐
+│           │           │           │
+Auth     User       Blog
+Service  Service    Service
+(Python) (Python)   (Python)
+    │        │           │
+    └────────┴───────────┘
+             ↓
+        PostgreSQL
+```
 
 ---
 
-## 4. 모니터링 & 로깅 설계
+## 4. CI/CD 파이프라인
 
-- **Prometheus**: Prometheus Operator를 사용하여 설치 및 관리. ServiceMonitor CRD를 통해 신규 서비스를 자동으로 탐지하고 메트릭 수집.
-- **Grafana**: Golden Signals 대시보드(Latency, Traffic, Errors, Saturation)를 기본으로 구성. Alertmanager와 연동하여 Slack으로 장애 알림 전송.
-- **Loki**: Promtail을 DaemonSet으로 각 노드에 배포하여 컨테이너 로그를 수집. Loki는 이를 저장하고, Grafana에서 `LogQL`을 통해 조회.
+### 4.1. CI 파이프라인 (GitHub Actions)
+
+**트리거**: `main` 브랜치에 코드 Push
+
+**실행 단계**:
+1. **Lint & Test**
+   - `golangci-lint` (Go 서비스)
+   - `flake8`, `pytest` (Python 서비스)
+   
+2. **Build**
+   - Docker 멀티 스테이지 빌드
+   - 경량화된 이미지 생성
+
+3. **Security Scan**
+   - Trivy로 이미지 취약점 스캔
+   - HIGH/CRITICAL 발견 시 빌드 실패
+
+4. **Push**
+   - 컨테이너 레지스트리에 이미지 업로드
+
+5. **Update Manifests**
+   - GitOps 저장소의 이미지 태그 업데이트
+   - 자동 커밋 및 푸시
+
+### 4.2. CD 파이프라인 (Argo CD)
+
+**동작 방식**:
+- GitOps 저장소를 주기적으로 모니터링
+- 변경 사항 감지 시 자동으로 Kubernetes에 배포
+- 배포 상태를 UI에서 실시간 확인 가능
+
+**주요 설정**:
+- `Sync Policy`: Automated (자동 동기화)
+- `Prune`: true (Git에서 삭제된 리소스 자동 제거)
+- `Self Heal`: true (수동 변경 시 Git 상태로 자동 복구)
 
 ---
 
-## 5. 보안 설계
+## 5. 모니터링 및 로깅
 
-- **Istio mTLS**: `PeerAuthentication` 정책을 `STRICT` 모드로 설정하여 네임스페이스 내 모든 서비스 간 통신을 암호화.
-- **Network Policy**: Kubernetes의 Network Policy를 사용하여 Pod 간의 통신을 명시적으로 허용. (예: `blog-service`는 `db-service`의 5432 포트로만 접근 가능)
-- **Secrets 관리**: 데이터베이스 암호 등 민감 정보는 Kubernetes Secrets에 저장하고, AWS Secrets Manager와 연동하는 방안을 고려. (Could-Have)
+### 5.1. Prometheus + Grafana (메트릭)
+
+**수집 메트릭**:
+- 애플리케이션 메트릭: 요청 수, 응답 시간, 에러율
+- 인프라 메트릭: CPU, 메모리, 네트워크, 디스크
+
+**주요 대시보드**:
+- Golden Signals (Latency, Traffic, Errors, Saturation)
+- Kubernetes 클러스터 상태
+- 서비스별 상세 메트릭
+
+### 5.2. Loki + Promtail (로그)
+
+**로그 수집 방식**:
+- Promtail이 각 노드에서 컨테이너 로그 수집
+- Loki에 저장 후 Grafana에서 조회
+
+**장점**:
+- Prometheus와 동일한 라벨 시스템 사용
+- Grafana에서 메트릭과 로그를 함께 확인
 
 ---
 
-## 참고 문서
+## 6. 보안 설계
+
+### 6.1. Istio mTLS
+
+- 서비스 간 모든 통신을 자동으로 암호화
+- 애플리케이션 코드 수정 없이 적용
+- `PeerAuthentication` 정책: STRICT 모드
+
+### 6.2. Network Policy
+
+- Kubernetes Network Policy로 Pod 간 통신 제한
+- 예: Blog Service는 PostgreSQL의 5432 포트만 접근 가능
+
+### 6.3. Secrets 관리
+
+- 데이터베이스 비밀번호 등 민감 정보는 Kubernetes Secrets에 저장
+- 환경 변수로 Pod에 주입
+
+---
+
+## 7. Solid Cloud 구성
+
+### 7.1. 개발 환경
+
+**목적**: 개발 및 테스트 환경
+
+**구성**:
+- Kubernetes 클러스터: 3 노드
+- 네임스페이스: 기능별로 분리
+- 리소스 제한: 각 서비스별 CPU/메모리 제한 설정
+
+### 7.2. AWS 전환 고려사항
+
+**Solid Cloud 테스트 완료 후 AWS 배포 시 변경 사항**:
+- EKS 클러스터 사용
+- AWS ALB를 Ingress Controller로 사용
+- ECR을 컨테이너 레지스트리로 사용
+- RDS를 PostgreSQL로 사용 (선택사항)
+
+---
+
+## 8. 참고 문서
 
 - **[요구사항 명세서](./requirements.md)**
 - **[프로젝트 계획서](./project-plan.md)**
 - **[기술 결정 기록 (ADR)](./adr/)**
+
+---
+
+## 부록: 주요 명령어
+
+### Terraform
+```bash
+# 인프라 생성
+terraform init
+terraform plan
+terraform apply
+
+# 인프라 삭제
+terraform destroy
+```
+
+### Kubernetes
+```bash
+# Pod 상태 확인
+kubectl get pods -A
+
+# 로그 확인
+kubectl logs <pod-name>
+
+# 서비스 확인
+kubectl get svc
+```
+
+### Argo CD
+```bash
+# 배포 상태 확인
+kubectl get applications -n argocd
+
+# 수동 동기화
+kubectl patch application <app-name> -n argocd -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"syncStrategy":{"hook":{}}}}}' --type merge
+```
