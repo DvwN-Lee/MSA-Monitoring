@@ -14,6 +14,24 @@ spec:
       labels:
         app: user-service
     spec:
+      initContainers:
+      - name: wait-for-postgresql
+        image: postgres:15-alpine
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - >
+          export PGPASSWORD="$DATABASE_PASSWORD";
+          until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER";
+          do echo "Waiting for PostgreSQL...";
+          sleep 3;
+          done
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
       containers:
       - name: user-service-container
         image: dongju101/titanium-user-service:latest
@@ -24,13 +42,13 @@ spec:
         envFrom:
         - configMapRef:
             name: app-config
+        - secretRef:
+            name: app-secrets
         env:
         - name: SERVICE_NAME
           value: "user-service"
         - name: SERVICE_PORT
           value: "8001"
-        - name: DATABASE_PATH
-          value: "/data/users.db"
         resources:
           requests:
             memory: "128Mi"

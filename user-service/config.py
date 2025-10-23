@@ -9,13 +9,24 @@ class ServerConfig:
 
 @dataclass
 class DatabaseConfig:
-    # getenv를 사용하여 환경변수를 읽고, 값이 없으면 기본값을 사용하도록 변경
-    db_file: str = os.getenv('DATABASE_PATH', '/data/app.db')
+    host: str = os.getenv('DATABASE_HOST', 'postgresql-service')
+    port: int = int(os.getenv('DATABASE_PORT', '5432'))
+    name: str = os.getenv('DATABASE_NAME', 'monitoring_db')
+    user: str = os.getenv('DATABASE_USER', 'app_user')
+    password: str = os.getenv('DATABASE_PASSWORD', 'password')
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        return (
+            f"postgresql://{self.user}:{self.password}"
+            f"@{self.host}:{self.port}/{self.name}"
+        )
 
 @dataclass
 class CacheConfig:
     host: str = os.getenv('REDIS_HOST', 'redis-service')
     port: int = int(os.getenv('REDIS_PORT', '6379'))
+    password: str = os.getenv('REDIS_PASSWORD', '')
     default_ttl: int = 300
 
 class Config:
@@ -23,6 +34,9 @@ class Config:
         self.server = ServerConfig()
         self.database = DatabaseConfig()
         self.cache = CacheConfig()
-        self.REDIS_URL = f"redis://{self.cache.host}:{self.cache.port}"
+        if self.cache.password:
+            self.REDIS_URL = f"redis://:{self.cache.password}@{self.cache.host}:{self.cache.port}"
+        else:
+            self.REDIS_URL = f"redis://{self.cache.host}:{self.cache.port}"
 
 config = Config()

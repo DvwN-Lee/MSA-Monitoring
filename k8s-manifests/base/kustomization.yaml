@@ -21,6 +21,8 @@ resources:
   # analytics-service 제거됨
 - blog-service-deployment.yaml
 - blog-service-service.yaml
+- postgresql-statefulset.yaml
+- postgresql-service.yaml
 - configmap.yaml
 - secret.yaml
 - user-service-backup-cronjob.yaml

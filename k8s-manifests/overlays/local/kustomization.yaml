@@ -42,6 +42,7 @@ configMapGenerator:
   - USER_SERVICE_URL=http://local-user-service:8001
   - AUTH_SERVICE_URL=http://local-auth-service:8002
   - BLOG_SERVICE_URL=http://local-blog-service:8005
+  - DATABASE_HOST=local-postgresql-service
   # ANALYTICS_SERVICE_URL 항목 제거 (analytics-service 삭제)
   - DASHBOARD_UI_URL=http://local-dashboard-ui-service:80
   - LOAD_BALANCER_URL=http://local-load-balancer-service:7100

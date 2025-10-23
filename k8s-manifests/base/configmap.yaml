@@ -13,6 +13,12 @@ data:
   DASHBOARD_UI_URL: "http://dashboard-ui-service:80"
   LOAD_BALANCER_URL: "http://load-balancer-service:7100"
 
+  # === PostgreSQL 연결 정보 ===
+  DATABASE_HOST: "postgresql-service"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "monitoring_db"
+  DATABASE_USER: "app_user"
+
   # === Redis 설정 ===
   REDIS_HOST: "redis-service"
   REDIS_PORT: "6379"
